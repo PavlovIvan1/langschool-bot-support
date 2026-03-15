@@ -1,0 +1,279 @@
+Запросы на изменение в БД (JSON):
+
+{
+    "table_name": "homework",
+    "columns": 
+        {
+            "homework_id": 1,
+            "user_data": "user_data",
+            "lesson_id": 1,
+            "status": "status",
+            "comment": "comment",
+            "update_time": "update_time"
+        },
+    "homework_id": "0"
+}
+
+
+config.SHEETS_DATA (JSON)
+{
+    "modules": [
+        {
+            "id": 1,
+            "name": "module_name"
+        }
+    ],
+
+    "lessons": [
+        {
+            "record_id": 1,
+            "module_id": 1,
+            "name": "lesson_name",
+            "lesson_id": 1,
+            "task_text": "task_text",
+            "task_file": "task_file"
+        }
+    ],
+
+    "homework": [
+        {
+            "homework_id": 1,
+            "user_data": "user_data",
+            "lesson_id": 1,
+            "status": "status",
+            "comment": "comment",
+            "update_time": "update_time"
+        }
+    ]
+
+}
+
+{
+    "table_name": "homework",
+    "columns": [
+        {
+            "homework_id": 1,
+            "user_data": "user_data",
+            "lesson_id": 1,
+            "status": "status",
+            "comment": "comment",
+            "update_time": "update_time"
+        }
+    ],
+    "homework_id": "0"
+}
+
+Привет! Проверь пожалуйста, правильно ли я написал код.
+
+config.py
+from environs import Env
+
+env: Env = Env()
+env.read_env()
+
+BOT_TOKEN = env("BOT_TOKEN")
+DATABASE_IP = env("DATABASE_IP")
+DATABASE_PASSWORD = env("DATABASE_PASSWORD")
+DATABASE_NAME = env("DATABASE_NAME")
+DATABASE_USER = env("DATABASE_USER")
+
+SPREADSHEET_URL = env("SPREADSHEET_URL")
+SPREADSHEET_URL_USERS = env("SPREADSHEET_URL_USERS")
+HOMEWORK_CHAT_ID = int(env("HOMEWORK_CHAT_ID"))
+
+SHEETS_DATA = {
+    "modules": [],
+    "lessons": [],
+    "homework": []
+}
+
+USERS_ACCESS = []
+
+SHEET_IDS = {
+    "modules": 0,
+    "lessons": 1497674645,
+    "homework": 1426438044
+}
+
+SHEETS_COLUMNS = {
+    "modules": [
+        "id",
+        "name",
+        "description"
+    ],
+
+    "lessons": [
+        "record_id",
+        "module_id",
+        "name",
+        "lesson_id",
+        "task_text",
+        "task_files"
+    ],
+
+    "homework": [
+        "homework_id",
+        "user_data",
+        "lesson_id",
+        "status",
+        "comment",
+        "update_time",
+        "message_link"
+    ]
+}
+
+bot.py
+async def check_info():
+    time_to_clear = time.time() + 1
+
+    # Авторизовываемся в гугл-таблице
+    agc = await agcm.authorize()
+    ss = await agc.open_by_url(config.SPREADSHEET_URL)
+    ss_2 = await agc.open_by_url(config.SPREADSHEET_URL_USERS)
+    
+    for key, value in config.SHEET_IDS.items():
+        table = await ss.get_worksheet_by_id(value)
+        table_data = await table.get_all_values()
+
+        for row in table_data[1:]:
+            row_dict = {}
+
+            n = 0
+            for cell in row:
+                print(f'cell: {cell} key: {config.SHEETS_COLUMNS[key][n]}')
+                row_dict[config.SHEETS_COLUMNS[key][n]] = cell
+                n += 1
+
+            config.SHEETS_DATA[key].append(row_dict)
+    
+    print(f'config.SHEETS_DATA (first time run): {config.SHEETS_DATA}')
+
+    table_2 = await ss_2.get_worksheet_by_id(0)
+    table_2_data = await table_2.get_all_values()
+
+    for row in table_2_data[1:]:
+        if row[0] not in config.USERS_ACCESS:
+            config.USERS_ACCESS.append(row[0])
+
+    print(f'config.USERS_ACCESS (first time run): {config.USERS_ACCESS}')
+
+    while True:
+        table_2 = await ss_2.get_worksheet_by_id(0)
+        table_2_data = await table_2.get_all_values()
+
+        for row in table_2_data[1:]:
+            if row[0] not in config.USERS_ACCESS:
+                config.USERS_ACCESS.append(row[0])
+        
+        await asyncio.sleep(3)
+
+        if 1 == 1:
+            for key, value in config.SHEET_IDS.items():
+                table = await ss.get_worksheet_by_id(value)
+                table_data = await table.get_all_values()
+
+                # Проверяем есть ли ячейка в переменной
+                for row in table_data[1:]:
+                    row_dict = {}
+
+                    n = 0
+                    for cell in row:
+                        #print(f'cell: {cell} key: {config.SHEETS_COLUMNS[key][n]}')
+                        row_dict[config.SHEETS_COLUMNS[key][n]] = cell
+                        n += 1
+
+                    if row_dict not in config.SHEETS_DATA[key]:
+                        config.SHEETS_DATA[key].append(row_dict)
+                        print(f'Добавлено: {row_dict}')
+
+                        if key == "homework":
+                            if row_dict['status'] == '' and row_dict['comment'] == '':
+                                try:
+                                    user_data = await bot.get_chat(int(row_dict['user_data'].split()[-1]))
+                                    await bot.send_message(int(row_dict['user_data'].split()[-1]), f'{user_data.first_name}, трекер приступил к проверке твоего задания ✅', reply_markup=keyboard.delete_message_keyboard())
+                                except:
+                                    pass
+                                
+                            elif row_dict['status'] == '❌' and row_dict['comment'] != '':
+                                try:
+                                    user_data = await bot.get_chat(int(row_dict['user_data'].split()[-1]))
+                                    await bot.send_message(int(row_dict['user_data'].split()[-1]), row_dict['comment'], reply_markup=keyboard.get_lesson_keyboard(row_dict['lesson_id']))
+                                except:
+                                    pass
+                            elif row_dict['status'] == '✅':
+                                try:
+                                    user_data = await bot.get_chat(int(row_dict['user_data'].split()[-1]))
+                                    await bot.send_message(int(row_dict['user_data'].split()[-1]), f'{user_data.first_name}, ты классно выполнила домашние задание. Корректировок нет, я принимаю его.', reply_markup=keyboard.delete_message_keyboard())
+                                except:
+                                    pass
+
+                rows_to_delete = []
+
+                # Проверяем есть ли ячейка в гугл-таблице
+                for row in config.SHEETS_DATA[key]:
+                    if list(row.values()) not in table_data[1:]:
+                        rows_to_delete.append(row)
+                        print(f'Удалено: {list(row.values())}//{table_data[1:]}')
+                
+                for row in rows_to_delete:
+                    config.SHEETS_DATA[key].remove(row)
+                    print(f'Удалено: {row}')
+            
+            #print(f'config.SHEETS_DATA (clear cache): {config.SHEETS_DATA}')
+            
+        update_data_dict = await sort_update_data(db.get_update_data())
+        #print(f'update_data_dict: {update_data_dict}')
+
+        for id, data in update_data_dict.items():
+            db.delete_update_data(id)
+
+            if data["table_name"] == "homework":
+                n = 0
+                success = False
+
+                for i in config.SHEETS_DATA["homework"]:
+                    if i["homework_id"] == data["homework_id"]:
+                        for key, value in data["columns"].items():
+                            config.SHEETS_DATA["homework"][n][key] = value
+                            success = True
+                            #print(f"Обновлено (Переменная): {config.SHEETS_DATA['homework'][n]}")
+
+                        table = await ss.get_worksheet_by_id(config.SHEET_IDS["homework"])
+                        table_data = await table.get_all_values()
+                        table_data_index = 2
+
+                        for z in table_data[1:]:
+                            if z[0] == data["homework_id"]:
+                                try:
+                                    #print(f"Обновлено (Гугл таблицы): {config.SHEETS_DATA['homework'][n]}")
+                                    await table.batch_update([{'range': f'A{table_data_index}:G{table_data_index}', 'values': [[str(l) for l in config.SHEETS_DATA["homework"][n].values()]]}])
+                                    table_data_index += 1
+                                except Exception as e:
+                                    print(f"Ошибка при обновлении: {e}")
+                    
+                    n += 1
+                
+                if not success:
+                    print(data["columns"])
+
+                    dict_data = {}
+
+                    for s in config.SHEETS_COLUMNS["homework"]:
+                        dict_data[s] = str(data["columns"][s])
+
+                    config.SHEETS_DATA["homework"].append(dict_data)
+
+                    try:
+                        table = await ss.get_worksheet_by_id(config.SHEET_IDS["homework"])
+                        table_data = await table.get_all_values()
+                        table_data_index = len(table_data) + 1
+
+                        config.SHEETS_DATA["homework"][-1]["homework_id"] = str(table_data_index)
+
+                        print(f"Добавлено (Гугл таблицы): {config.SHEETS_DATA['homework'][-1]}")
+                        
+                        await table.batch_update([{'range': f'A{table_data_index}:G{table_data_index}', 'values': [[str(l) for l in list(dict_data.values())]]}])
+                    except Exception as e:
+                        print(f"Ошибка при добавлении: {e}")
+
+        await asyncio.sleep(15)

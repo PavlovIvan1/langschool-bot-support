@@ -656,14 +656,25 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     lessons_list = db.get_lessons(module_id, users_flow)
     module_data = db.get_module(module_id, users_flow)
     module_name = module_data['name']
-    module_desc = ("\n" + module_data['description']) if module_data['description'] != '' else ''
+    
+    # Скрываем описание для определённых модулей
+    if str(module_id) in [str(m) for m in config.MODULES_WITHOUT_DESCRIPTION]:
+        module_desc = ''
+    else:
+        module_desc_data = module_data.get('description', '')
+        module_desc = ("\n" + module_desc_data) if module_desc_data and module_desc_data.strip() != '' else ''
+
+    # Формируем текст сообщения
+    message_text = module_name + module_desc
+    if not message_text or message_text.strip() == '':
+        message_text = 'Модуль ' + str(module_id)
 
     rework_lessons = db.get_rework_lessons_ids(call.from_user.id, module_id)
     check_lessons = db.get_check_lessons_ids(call.from_user.id, module_id)
     done_lessons = db.get_done_lessons_ids(call.from_user.id, module_id)
     sent_lessons = db.get_sent_lessons_ids(call.from_user.id, module_id)
 
-    await edit_message(call.message, f'{module_name}{module_desc}', reply_markup=keyboard.lessons_keyboard(lessons_list, done_lessons, rework_lessons, check_lessons, sent_lessons))
+    await edit_message(call.message, message_text, reply_markup=keyboard.lessons_keyboard(lessons_list, done_lessons, rework_lessons, check_lessons, sent_lessons))
 
 @start_router.callback_query(F.data.startswith('get_lesson:'))
 async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
